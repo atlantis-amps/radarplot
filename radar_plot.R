@@ -26,14 +26,19 @@ if(length(.packages[!.inst]) > 0) install.packages(.packages[!.inst])
 # Load packages into session 
 lapply(.packages, require, character.only=TRUE)
 
-# Load data
+##USER CHANGE FROM HERE
+
+# Specify run directories
 folder.paths <- c(here::here("Run_mv1_v6716_15yrs_salmonnoresidents_35","outputFolder"),
                   here::here("Run_mv1_v6716_15yrs_salmonnoresidents_36","outputFolder"))
 
 scenario.names <- c("Base scenario", "1.5°C warming")
-startyear <- 2011
+startyear <- 2011 #model start year
 runtime <- 15 #length of runs in years
 outputfrequency <- 73 #output frequency in days
+
+###END PARAMETERS TO MODIFY
+
 
 googlesheets4::gs4_deauth()
 
