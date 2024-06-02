@@ -17,8 +17,11 @@ Sys.setlocale("LC_CTYPE", "en_US.UTF-8")# https://www.r-bloggers.com/web-scrapin
 
 # List of packages for session
 .packages = c("devtools", "tidyverse","stringr","R.utils","here", 
-              "ggradar", "rphylopic", "googlesheets4", "googledrive","scales")
-#install.packages(.packages, dependencies = TRUE)
+              "ggradar", "rphylopic", "googlesheets4", "googledrive","scales", "sysfonts")
+
+# Install CRAN packages (if not already installed)
+.inst <- .packages %in% installed.packages()
+if(length(.packages[!.inst]) > 0) install.packages(.packages[!.inst])
 
 # Load packages into session 
 lapply(.packages, require, character.only=TRUE)
@@ -36,18 +39,41 @@ googlesheets4::gs4_deauth()
 
 vital.signs<- googlesheets4::read_sheet(ss="1PxZQwlBadcxI0G-Z7i8DMfrgsqAoWperfA76rXq4yIs", sheet = "vital_signs")
 
-vital.signs.sel <- vital.signs %>% 
-  dplyr::filter(output_type=="biomass") %>%
-  dplyr::mutate(ind_no=1:nrow(.)) %>% 
-  tidyr::separate_rows(func_group, sep = "\n")
-
 no.folder.paths <- 1:length(folder.paths) 
   
-get_datafile <- function(no.path, folder.paths, thisparameter, runtime, vital.signs.sel, scenario.names){
+get_datafile <- function(no.path, folder.paths, thisparameter, runtime, vital.signs, scenario.names){
 
   this.folderpath <- folder.paths[no.path]
   this.scenario <- scenario.names[no.path]
+
+  vital.signs.sel <- vital.signs %>% 
+    dplyr::filter(output_type==thisparameter) %>%
+    dplyr::mutate(ind_no=1:nrow(.)) %>% 
+    tidyr::separate_rows(func_group, sep = "\n")
   
+    if(thisparameter=="abundance"){
+    
+    this.file <- readr::read_csv(paste0(this.folderpath,"/Nums.csv"))
+    
+    data.period <- runtime-5
+    
+    this.data <- this.file %>% 
+      dplyr::filter(Year>data.period) %>% 
+      dplyr::group_by(code, longname) %>%
+      dplyr::summarise(abundance=mean(variable))
+    
+    vital.signs.param <- vital.signs.sel %>% 
+      dplyr::rename(code=func_group) %>% 
+      dplyr::left_join(this.data, by="code") %>%
+      dplyr::group_by(indicator_short) %>%
+      dplyr::summarise(abundance=sum(abundance)) %>% 
+      dplyr::ungroup() %>% 
+      dplyr::mutate(scenario=this.scenario, parameter = thisparameter) %>% 
+      dplyr::mutate(norm_value=scales::rescale(abundance, to=c(0,1))) %>% 
+      dplyr::select(-abundance)
+    
+      }
+    
   if(thisparameter=="biomass"){
    
     this.file <- readr::read_csv(paste0(this.folderpath,"/biomass.csv"))
@@ -80,22 +106,41 @@ get_datafile <- function(no.path, folder.paths, thisparameter, runtime, vital.si
      dplyr::group_by(indicator_short) %>%
      dplyr::summarise(biomass=sum(biomass)) %>% 
      dplyr::ungroup() %>% 
-     dplyr::mutate(scenario=this.scenario) %>% 
-     dplyr::mutate(norm_value=scales::rescale(biomass, to=c(0,1)))
-   
-        
-    return(vital.signs.param) 
+     dplyr::mutate(scenario=this.scenario, parameter = thisparameter) %>% 
+     dplyr::mutate(norm_value=scales::rescale(biomass, to=c(0,1))) %>% 
+     dplyr::select(-biomass)
+  
   }
+  
+  return(vital.signs.param) 
+  
 }
 
-radar.plot.data <- lapply(no.folder.paths, get_datafile, folder.paths, thisparameter="biomass", runtime, vital.signs.sel, scenario.names) %>% 
+radar.plot.data.biomass <- lapply(no.folder.paths, get_datafile, folder.paths, thisparameter="biomass", runtime, vital.signs, scenario.names) %>% 
+  bind_rows()
+
+radar.plot.data.abundance <- lapply(no.folder.paths, get_datafile, folder.paths, thisparameter="abundance", runtime, vital.signs, scenario.names) %>% 
   bind_rows()
 
 #https://docs.google.com/spreadsheets/d/1PxZQwlBadcxI0G-Z7i8DMfrgsqAoWperfA76rXq4yIs/edit#gid=0
 #each column should be an indicator, first column are scenarios
+
+make_radarplot <- function(radar.plot.data, thisparameter){
+  
+  radar.data <- radar.plot.data %>% 
+    dplyr::ungroup() %>% 
+    tidyr::pivot_wider(names_from=indicator_short, values_from=norm_value) %>% 
+    dplyr::mutate(scenario=as.factor(scenario))  
+  
+  # Color for scenarios
+  # See for colors 
+  lcols <- c("#caf0f8","#00b4d8","#03045e")
+  
+  #Add nice font
+  #download.file("
 radar.data <- radar.plot.data %>% 
   dplyr::ungroup() %>% 
-  dplyr::select(-biomass) %>%
+  dplyr::select(-parameter) %>%
   tidyr::pivot_wider(names_from=indicator_short, values_from=norm_value) %>% 
   dplyr::mutate(scenario=as.factor(scenario))  
 
@@ -115,12 +160,20 @@ radar.plot <- ggradar::ggradar(radar.data,
         gridline.min.colour = "gray60",
         gridline.mid.colour = "gray60",
         gridline.max.colour = "gray60",
-        group.colours = c("#caf0f8","#00b4d8","#03045e"), 
+     #   group.colours = c("#caf0f8","#00b4d8","#03045e"), 
         values.radar = c(0,0.5,1),
         legend.position = "bottom",
-        axis.label.size = 3.5)
-      #  font.radar = "Circular Air")
+        axis.label.size = 3.5,
+        font.radar = "roboto")
       #  plot.extent.x.sf = 1.1,
       #  plot.extent.y.sf = 1.1)
 
-ggplot2::ggsave(filename="radar_example.png",radar.plot, scale = 1, width = 12, height = 9)
+ggplot2::ggsave(filename=paste0("radar_",thisparameter,".png"),radar.plot, scale = 1, width = 12, height = 9)
+
+}
+
+sysfonts::font_add_google("Roboto", "roboto")
+
+
+make_radarplot(radar.plot.data=radar.plot.data.biomass, thisparameter="biomass")
+make_radarplot(radar.plot.data=radar.plot.data.abundance, thisparameter="abundance")
