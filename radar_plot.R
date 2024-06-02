@@ -163,7 +163,7 @@ radar.plot <- ggradar::ggradar(radar.data,
      #   group.colours = c("#caf0f8","#00b4d8","#03045e"), 
         values.radar = c(0,0.5,1),
         legend.position = "bottom",
-        axis.label.size = 3.5,
+        axis.label.size = 4.5,
         font.radar = "roboto")
       #  plot.extent.x.sf = 1.1,
       #  plot.extent.y.sf = 1.1)
@@ -174,6 +174,8 @@ ggplot2::ggsave(filename=paste0("radar_",thisparameter,".png"),radar.plot, scale
 
 sysfonts::font_add_google("Roboto", "roboto")
 
+#add phylopic icon to plot
+#beaver_plot + add_phylopic(beaver_pic, alpha = 1, x = 10, y = 37.4, ysize = 10)
 
 make_radarplot(radar.plot.data=radar.plot.data.biomass, thisparameter="biomass")
 make_radarplot(radar.plot.data=radar.plot.data.abundance, thisparameter="abundance")
